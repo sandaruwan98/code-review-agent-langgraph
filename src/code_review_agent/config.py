@@ -4,6 +4,7 @@ from pydantic import Field
 
 class Settings(BaseSettings):
     # LLM
+    anthropic_base_url: str = Field(..., env="ANTHROPIC_BASE_URL")
     anthropic_api_key: str = Field(..., env="ANTHROPIC_API_KEY")
     model_name: str = Field("claude-sonnet-4-6", env="MODEL_NAME")
 

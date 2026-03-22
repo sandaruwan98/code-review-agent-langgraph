@@ -48,3 +48,6 @@ class ReviewState(TypedDict):
     human_approved: bool
     human_feedback: str | None
 
+    # cost tracking
+    # Annotated with a merge reducer so parallel nodes can write concurrently
+    token_usage: Annotated[dict[str, Any], lambda a, b: {**a, **b}]
