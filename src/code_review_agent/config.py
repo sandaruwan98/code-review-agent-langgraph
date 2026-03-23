@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     # GitHub
     github_token: str = Field(..., env="GITHUB_TOKEN")
 
+    # Review behaviour
+    min_severity: str = Field("minor", env="MIN_SEVERITY")  # critical | major | minor
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
