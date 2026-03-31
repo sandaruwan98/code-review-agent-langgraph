@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     # Review behaviour
     min_severity: str = Field("minor", env="MIN_SEVERITY")  # critical | major | minor
+    post_to_github: bool = Field(False, env="POST_TO_GITHUB")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

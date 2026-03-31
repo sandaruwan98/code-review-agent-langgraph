@@ -16,8 +16,32 @@ from code_review_agent.nodes import (
     security_agent,
     style_agent,
     aggregate,
-    reflect
+    reflect,
+    post_review,
 )
+
+
+def human_approval(state: ReviewState) -> dict:
+    """
+    Human-in-the-loop interrupt node.
+    LangGraph will pause here when .invoke() is called with an interrupt.
+    The caller resumes by calling .invoke() again with updated state fields:
+      human_approved=True/False and optionally human_feedback="..."
+    """
+    # This node itself is a no-op — the interrupt happens via graph config.
+    # We just return the approval fields that were injected by the human.
+    return {
+        "human_approved": state.get("human_approved", False),
+        "human_feedback": state.get("human_feedback"),
+    }
+
+
+def should_post(state: ReviewState) -> str:
+    """Conditional edge: proceed to post_review only if human approved."""
+    if state.get("human_approved", False):
+        return "post_review"
+    return END
+
 
 def build_graph(checkpointer=None):
     builder = StateGraph(ReviewState)
@@ -30,6 +54,8 @@ def build_graph(checkpointer=None):
     builder.add_node("style_agent", style_agent)
     builder.add_node("aggregate", aggregate)
     builder.add_node("reflect", reflect)
+    builder.add_node("human_approval", human_approval)
+    builder.add_node("post_review", post_review)
 
     # ── edges ─────────────────────────────────────────────────────────────────
     builder.add_edge(START, "fetch_pr")
@@ -46,7 +72,11 @@ def build_graph(checkpointer=None):
     builder.add_edge("style_agent", "aggregate")
 
     builder.add_edge("aggregate", "reflect")
-    builder.add_edge("reflect", END)
+    builder.add_edge("reflect", "human_approval")
+
+    # Conditional: human approved → post, else end
+    builder.add_conditional_edges("human_approval", should_post)
+    builder.add_edge("post_review", END)
 
     cp = checkpointer or MemorySaver()
-    return builder.compile(checkpointer=cp)
+    return builder.compile(checkpointer=cp, interrupt_before=["human_approval"])

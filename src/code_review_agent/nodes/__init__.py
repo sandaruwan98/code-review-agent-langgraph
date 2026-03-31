@@ -5,6 +5,7 @@ from code_review_agent.nodes.security_agent import security_agent
 from code_review_agent.nodes.style_agent import style_agent
 from code_review_agent.nodes.aggregate import aggregate
 from code_review_agent.nodes.reflect import reflect
+from code_review_agent.nodes.post_review import post_review
 
 __all__ = [
     "fetch_pr",
@@ -14,4 +15,5 @@ __all__ = [
     "style_agent",
     "aggregate",
     "reflect",
+    "post_review",
 ]
