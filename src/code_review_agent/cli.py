@@ -7,7 +7,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 import textwrap
@@ -37,8 +36,28 @@ CATEGORY_EMOJI = {"bug": "🐛", "security": "🔒", "style": "✨", "test": "�
 
 PR_URL_PATTERN = re.compile(r"github\.com/[^/]+/[^/]+/pull/\d+")
 
+NODE_LABELS = {
+    "fetch_pr": "Fetching PR metadata & diff",
+    "load_context": "Loading file context",
+    "bug_agent": "Analysing for bugs",
+    "security_agent": "Analysing for security issues",
+    "style_agent": "Analysing for code quality",
+    "aggregate": "Aggregating findings",
+    "reflect": "Reviewing & deduplicating",
+    "human_approval": "Awaiting approval",
+    "post_review": "Posting review",
+}
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _stream_graph(graph, input_state, config) -> None:
+    """Run the graph with streaming, printing per-node progress."""
+    for event in graph.stream(input_state, config=config, stream_mode="updates"):
+        for node_name in event:
+            label = NODE_LABELS.get(node_name, node_name)
+            print(f"  {CYAN}→{RESET} {label:.<42s} {GREEN}✓{RESET}")
 
 
 def _build_config(settings: Settings, args: argparse.Namespace) -> dict:
@@ -183,10 +202,8 @@ def _run(argv: list[str] | None = None) -> None:
     # Phase 1: run until human_approval interrupt
     print(f"\n{BOLD}Reviewing:{RESET} {args.pr_url}")
     print(f"{DIM}Model: {config['configurable']['model_name']}{RESET}\n")
-    print("Analysing PR (this may take a moment)...")
-
     try:
-        graph.invoke(initial_state, config=config)
+        _stream_graph(graph, initial_state, config)
     except Exception as e:
         print(f"\nError during analysis: {e}", file=sys.stderr)
         sys.exit(1)
@@ -209,7 +226,7 @@ def _run(argv: list[str] | None = None) -> None:
         {"human_approved": approved, "human_feedback": feedback},
         as_node="human_approval",
     )
-    graph.invoke(None, config=config)
+    _stream_graph(graph, None, config)
 
     if approved:
         post_mode = "Posted" if config["configurable"]["post_to_github"] else "Dry-run complete"
