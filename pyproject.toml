@@ -17,6 +17,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
     "python-dotenv>=1.2.2",
+    "langgraph-checkpoint-sqlite>=3.0.3",
 ]
 
 [project.scripts]

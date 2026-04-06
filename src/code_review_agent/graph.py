@@ -5,8 +5,13 @@ from __future__ import annotations
 
 from langchain_core.runnables import RunnableConfig
 
+import sqlite3
+from pathlib import Path
+
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+DB_PATH = Path(__file__).resolve().parents[2] / "checkpoints.db"
 
 from code_review_agent.state import ReviewState
 from code_review_agent.nodes import (
@@ -78,5 +83,5 @@ def build_graph(checkpointer=None):
     builder.add_conditional_edges("human_approval", should_post)
     builder.add_edge("post_review", END)
 
-    cp = checkpointer or MemorySaver()
+    cp = checkpointer or SqliteSaver(sqlite3.connect(str(DB_PATH), check_same_thread=False))
     return builder.compile(checkpointer=cp, interrupt_before=["human_approval"])
