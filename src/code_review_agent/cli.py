@@ -7,10 +7,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 import textwrap
-import uuid
 
 from code_review_agent.config import Settings
 from code_review_agent.graph import build_graph
@@ -60,13 +60,15 @@ def _stream_graph(graph, input_state, config) -> None:
             print(f"  {CYAN}→{RESET} {label:.<42s} {GREEN}✓{RESET}")
 
 
-def _build_config(settings: Settings, args: argparse.Namespace) -> dict:
+def _build_config(settings: Settings, args: argparse.Namespace, thread_id: str | None = None) -> dict:
     """Map Settings + CLI overrides into the configurable dict the graph expects."""
+    # Deterministic thread_id from the PR URL so re-runs resume from checkpoint
+    tid = thread_id or hashlib.sha256(args.pr_url.encode()).hexdigest()[:12]
     return {
         "configurable": {
-            "thread_id": str(uuid.uuid4()),
+            "thread_id": tid,
             "anthropic_api_key": settings.anthropic_api_key,
-            "anthropic_base_url": settings.anthropic_base_url,
+            "anthropic_base_url": settings.model_base_url,
             "model_name": settings.model_name,
             "github_token": settings.github_token,
             "min_severity": args.min_severity or settings.min_severity,
@@ -197,19 +199,35 @@ def _run(argv: list[str] | None = None) -> None:
     config = _build_config(settings, args)
     graph = build_graph()
 
-    initial_state = {"pr_url": args.pr_url, "findings": [], "token_usage": {}}
-
-    # Phase 1: run until human_approval interrupt
-    print(f"\n{BOLD}Reviewing:{RESET} {args.pr_url}")
-    print(f"{DIM}Model: {config['configurable']['model_name']}{RESET}\n")
-    try:
-        _stream_graph(graph, initial_state, config)
-    except Exception as e:
-        print(f"\nError during analysis: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    # Phase 2: display findings and prompt for approval
+    # ── Check for a previous checkpoint (resume support) ────────────────────
     snapshot = graph.get_state(config)
+    resumed = False
+
+    if snapshot and snapshot.values and snapshot.values.get("final_comments"):
+        print(f"\n{YELLOW}Found previous analysis for this PR.{RESET}")
+        choice = input(f"  [{BOLD}r{RESET}] Resume from findings  [{BOLD}n{RESET}] Start fresh  > ").strip().lower()
+        if choice == "r":
+            resumed = True
+        else:
+            # Start fresh with a new thread_id to avoid stale checkpoint
+            fresh_tid = hashlib.sha256(f"{args.pr_url}:fresh".encode()).hexdigest()[:12]
+            config = _build_config(settings, args, thread_id=fresh_tid)
+
+    # ── Phase 1: run analysis (skip if resuming) ────────────────────────────
+    if not resumed:
+        initial_state = {"pr_url": args.pr_url, "findings": [], "token_usage": {}}
+
+        print(f"\n{BOLD}Reviewing:{RESET} {args.pr_url}")
+        print(f"{DIM}Model: {config['configurable']['model_name']}{RESET}\n")
+        try:
+            _stream_graph(graph, initial_state, config)
+        except Exception as e:
+            print(f"\nError during analysis: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        snapshot = graph.get_state(config)
+
+    # ── Phase 2: display findings and prompt for approval ───────────────────
     comments = snapshot.values.get("final_comments", [])
     _display_findings(comments)
 
@@ -220,20 +238,45 @@ def _run(argv: list[str] | None = None) -> None:
 
     approved, feedback = _prompt_approval()
 
-    # Phase 3: resume the graph
+    # ── Phase 3: resume the graph (with retry on post failure) ──────────────
     graph.update_state(
         config,
         {"human_approved": approved, "human_feedback": feedback},
         as_node="human_approval",
     )
-    _stream_graph(graph, None, config)
 
-    if approved:
+    posted = False
+    while True:
+        try:
+            _stream_graph(graph, None, config)
+            posted = True
+            break
+        except Exception as e:
+            print(f"\n{RED}Post failed:{RESET} {e}")
+            retry = input(
+                f"  [{BOLD}r{RESET}] Retry (after fixing .env)  "
+                f"[{BOLD}s{RESET}] Skip posting  > "
+            ).strip().lower()
+            if retry != "r":
+                print(f"{DIM}Review not posted.{RESET}")
+                break
+            # Re-read .env in case the user updated the token
+            settings = Settings()
+            config["configurable"]["github_token"] = settings.github_token
+            # Re-inject approval state for the retry
+            graph.update_state(
+                config,
+                {"human_approved": approved, "human_feedback": feedback},
+                as_node="human_approval",
+            )
+            print(f"{DIM}Retrying...{RESET}\n")
+
+    if posted and approved:
         post_mode = "Posted" if config["configurable"]["post_to_github"] else "Dry-run complete"
         print(f"\n{GREEN}{post_mode}.{RESET}")
-    else:
+    elif not approved:
         print(f"\n{DIM}Review discarded.{RESET}")
 
-    # Phase 4: token usage summary
+    # ── Phase 4: token usage summary ────────────────────────────────────────
     final = graph.get_state(config)
     _print_token_usage(final.values.get("token_usage", {}))

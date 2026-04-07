@@ -65,6 +65,15 @@ def post_review(state: ReviewState, config: RunnableConfig) -> dict:
             headers=headers,
             json={"body": body, "event": "COMMENT"},
         )
+        if resp.status_code == 403:
+            raise PermissionError(
+                "GitHub returned 403 Forbidden. Your token likely needs the "
+                "'repo' scope. Update at https://github.com/settings/tokens"
+            )
+        if resp.status_code == 401:
+            raise PermissionError(
+                "GitHub returned 401 Unauthorized. Check GITHUB_TOKEN in .env"
+            )
         resp.raise_for_status()
 
     return {}
