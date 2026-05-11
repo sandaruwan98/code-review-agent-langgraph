@@ -68,10 +68,10 @@ def _build_config(settings: Settings, args: argparse.Namespace, thread_id: str |
         "configurable": {
             "thread_id": tid,
             "anthropic_api_key": settings.anthropic_api_key,
-            "anthropic_base_url": settings.model_base_url,
+            "model_base_url": settings.model_base_url,
             "model_name": settings.model_name,
             "github_token": settings.github_token,
-            "min_severity": args.min_severity or settings.min_severity,
+            "model_severity": args.min_severity or settings.min_severity,
             "post_to_github": args.post or settings.post_to_github,
         }
     }

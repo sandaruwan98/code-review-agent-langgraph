@@ -42,7 +42,7 @@ Return [] if you find no issues. Return ONLY the JSON array — no prose.
 def style_agent(state: ReviewState, config: RunnableConfig) -> dict:
     model_name = config["configurable"].get("model_name", "claude-sonnet-4-6")
     api_key = config["configurable"].get("anthropic_api_key", "")
-    base_url = config["configurable"].get("anthropic_base_url", "")
+    base_url = config["configurable"].get("model_base_url", "")
 
     # llm = ChatAnthropic(model=model_name, api_key=api_key, max_tokens=2048)
     llm = ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url, max_tokens=2048)

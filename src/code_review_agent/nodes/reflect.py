@@ -33,7 +33,7 @@ Return ONLY the JSON array — no prose.
 def reflect(state: ReviewState, config: RunnableConfig) -> dict:
     model_name = config["configurable"].get("model_name", "claude-sonnet-4-6")
     api_key = config["configurable"].get("anthropic_api_key", "")
-    base_url = config["configurable"].get("anthropic_base_url", "")
+    base_url = config["configurable"].get("model_base_url", "")
 
     comments = state.get("final_comments", [])
     if not comments:

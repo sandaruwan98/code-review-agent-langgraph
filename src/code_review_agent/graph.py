@@ -80,7 +80,11 @@ def build_graph(checkpointer=None):
     builder.add_edge("reflect", "human_approval")
 
     # Conditional: human approved → post, else end
-    builder.add_conditional_edges("human_approval", should_post)
+    builder.add_conditional_edges(
+        "human_approval",
+        should_post,
+        {"post_review": "post_review", END: END},
+    )
     builder.add_edge("post_review", END)
 
     cp = checkpointer or SqliteSaver(sqlite3.connect(str(DB_PATH), check_same_thread=False))
